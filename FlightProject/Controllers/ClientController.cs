@@ -1,10 +1,10 @@
 ﻿using FlightProject.Models;
 using FlightProject.Services;
+using log4net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-using Org.BouncyCastle.Crypto.Operators;
-using System.Data;
+using System.Security.Claims;
 
 namespace FlightProject.Controllers
 {
@@ -16,21 +16,25 @@ namespace FlightProject.Controllers
         private readonly ReservationService _reservationServices;
         private readonly VolsService _volsService;
         private readonly JwtService _jwtService;
-        public ClientController (ClientsService clientsServices, JwtService jwtService, VolsService volsServices, ReservationService reservation)
+        private readonly ILog _log;
+        public ClientController(ClientsService clientsServices, JwtService jwtService, VolsService volsServices, ReservationService reservation, ILog log)
         {
             _clientsServices = clientsServices;
             _jwtService = jwtService;
             _reservationServices = reservation;
             _volsService = volsServices;
+            _log = log;
         }
         [HttpGet]
-        [Authorize(Roles = "admin")]
+        [EnableCors("AllowAllOrigins")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<List<Client>> Get()
         {
+            _log.Info($"Requst all Client");
+
             return await _clientsServices.GetClientsAsync();
         }
         [HttpGet("{id:length(24)}")]
-        [Authorize(Roles = "admin")]
         public async Task<ActionResult<Client>> Get(string id)
         {
             var client = await _clientsServices.GetClientsAsync(id);
@@ -42,7 +46,7 @@ namespace FlightProject.Controllers
         }
         [EnableCors("AllowAllOrigins")]
         [HttpPost("Register")]
-       
+
         public async Task<IActionResult> CreateUsers(Client newClient)
         {
             var client = await _clientsServices.GetClientsbyEmailAsync(newClient.email);
@@ -62,32 +66,35 @@ namespace FlightProject.Controllers
                 birthday = newClient.birthday,
                 numeroPasseport = newClient.numeroPasseport
             };
-            await _clientsServices.CreateAsync(user); 
+            await _clientsServices.CreateAsync(user);
+            _log.Info($"client create for email { user.email} ");
             return Ok();
         }
+
         [HttpPost("Login")]
+        [EnableCors("AllowAllOrigins")]
         public async Task<ActionResult<string>> Login(LoginUser loginUser)
         {
             var client = await _clientsServices.GetClientsbyEmailAsync(loginUser.email);
             if (client == null)
             {
-                return NotFound("Email ou mot de passe incorrect");
+                return BadRequest("Email ou mot de passe incorrect");
             }
 
             var isPasswordValid = BCrypt.Net.BCrypt.Verify(loginUser.password, client.password);
             if (!isPasswordValid)
             {
-                return NotFound("Email ou mot de passe incorrect");
+                return BadRequest("Email ou mot de passe incorrect");
             }
-
             var token = _jwtService.GenerateToken(client);
-            return Ok(new { token });
+            _log.Info($"connection  {client.email} ");
+            return Ok(token);
         }
         [HttpPut("{id:length(24)}")]
         [Authorize]
         public async Task<IActionResult> Update(string id, Client updateClient)
         {
-           var client = await _clientsServices.GetClientsAsync(id);
+            var client = await _clientsServices.GetClientsAsync(id);
             if (client == null)
             {
                 return NotFound();
@@ -96,7 +103,8 @@ namespace FlightProject.Controllers
             return Ok();
         }
         [HttpDelete("{id:length(24)}")]
-        [Authorize]
+        [EnableCors("AllowAllOrigins")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> Delete(string id)
         {
             var client = await _clientsServices.GetClientsAsync(id);
@@ -108,25 +116,35 @@ namespace FlightProject.Controllers
             return Ok();
         }
         [HttpGet("clientReservation")]
-        public async Task<ActionResult<List<Vol>>> showMyReservations(string client)
+        [Authorize]
+        public async Task<ActionResult<List<Vol>>> showMyReservations()
         {
+            string client = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            _log.Info($"client create for email {client.email} ");
+            if (User.IsInRole("client") && client == null)
+            {
+                return BadRequest("Client ID not found");
+            }
+            if (User.IsInRole("client") && client != null && client != User.Identity.Name)
+            {
+                return Unauthorized();
+            }
             List<Vol> result = new List<Vol>();
             var reservations = await _reservationServices.GetReservationsClientsAsync(client);
             if (reservations == null)
             {
                 return NotFound();
             }
-            foreach (Reservation resevation in reservations)
+            foreach (Reservation reservation in reservations)
             {
-                var flight = await _volsService.GetVolAsync(resevation.vol);
+                var flight = await _volsService.GetVolAsync(reservation.vol);
                 if (flight == null)
                 {
-                    return BadRequest("probleme systeme contact us");
+                    return BadRequest("Problème système, contactez-nous");
                 }
                 result.Add(flight);
             }
             return Ok(result);
-
         }
     }
 }

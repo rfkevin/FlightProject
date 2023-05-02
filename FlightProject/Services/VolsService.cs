@@ -25,13 +25,13 @@ namespace FlightProject.Services
         {
             await _volCollections.InsertOneAsync(vol);
         }
-        public async Task UpdateVolAsync(string Id, Vol vol)
+        public async Task UpdateVolAsync(string id, Vol vol)
         {
-            await _volCollections.ReplaceOneAsync(Id, vol);
+            await _volCollections.ReplaceOneAsync(x => x.Id == id, vol);
         }
-        public async Task DeleteVolAsync(string Id)
+        public async Task DeleteVolAsync(string id)
         {
-            await _volCollections.FindOneAndDeleteAsync(Id);
+            await _volCollections.FindOneAndDeleteAsync(x => x.Id == id);
         }
     }
 }

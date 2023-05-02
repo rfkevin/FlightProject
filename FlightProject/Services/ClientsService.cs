@@ -1,10 +1,6 @@
 ﻿using FlightProject.Models;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 
 namespace FlightProject.Services
 {
@@ -31,9 +27,9 @@ namespace FlightProject.Services
         public async Task CreateAsync(Client client) => 
             await _clientsCollections.InsertOneAsync(client);
         public async Task UpdateAsync(string id, Client updatedClient) => 
-            await _clientsCollections.ReplaceOneAsync(id, updatedClient);
+            await _clientsCollections.ReplaceOneAsync(x => x.Id == id, updatedClient);
         public async Task RemoveAsync(string id) => 
-            await _clientsCollections.DeleteOneAsync(id);
+            await _clientsCollections.DeleteOneAsync(x => x.Id == id);
 
 
     }
